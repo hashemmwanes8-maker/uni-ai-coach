@@ -1,10 +1,21 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { BookOpen, Clock, FileText, CheckCircle2 } from "lucide-react";
+import { BookOpen, Clock, FileText, CheckCircle2, LogOut } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 
 const StudentDashboard = () => {
+  const { user, loading, signOut } = useAuth("student");
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
   const assignments = [
     {
       id: 1,
@@ -62,9 +73,10 @@ const StudentDashboard = () => {
             <h1 className="text-2xl font-bold text-foreground">Student Dashboard</h1>
             <p className="text-sm text-muted-foreground">Albukhary International University</p>
           </div>
-          <Link to="/">
-            <Button variant="outline">Logout</Button>
-          </Link>
+          <Button variant="outline" onClick={signOut}>
+            <LogOut className="mr-2 h-4 w-4" />
+            Logout
+          </Button>
         </div>
       </header>
 

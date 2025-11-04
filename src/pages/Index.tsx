@@ -1,8 +1,43 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { GraduationCap, BookOpen, Users } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 const Index = () => {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        const { data: roles } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", session.user.id)
+          .single();
+        
+        if (roles) {
+          navigate(roles.role === "student" ? "/student/dashboard" : "/lecturer/dashboard");
+          return;
+        }
+      }
+      setLoading(false);
+    };
+    
+    checkUser();
+  }, [navigate]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
   return <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5">
       <div className="container mx-auto px-6 py-12">
         <div className="text-center mb-16">
@@ -43,7 +78,7 @@ const Index = () => {
                   Receive detailed feedback and grades
                 </li>
               </ul>
-              <Link to="/student/dashboard" className="block">
+              <Link to="/auth?mode=student" className="block">
                 <Button className="w-full" size="lg">
                   Enter Student Portal
                 </Button>
@@ -76,7 +111,7 @@ const Index = () => {
                   Provide comprehensive feedback
                 </li>
               </ul>
-              <Link to="/lecturer/dashboard" className="block">
+              <Link to="/auth?mode=lecturer" className="block">
                 <Button className="w-full" size="lg" variant="secondary">
                   Enter Lecturer Portal
                 </Button>

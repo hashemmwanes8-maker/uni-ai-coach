@@ -1,10 +1,21 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, FileCheck, Clock, BookOpen } from "lucide-react";
+import { Users, FileCheck, Clock, BookOpen, LogOut, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 
 const LecturerDashboard = () => {
+  const { user, loading, signOut } = useAuth("lecturer");
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
   const submissions = [
     {
       id: 1,
@@ -66,9 +77,18 @@ const LecturerDashboard = () => {
             <h1 className="text-2xl font-bold text-foreground">Lecturer Dashboard</h1>
             <p className="text-sm text-muted-foreground">Albukhary International University</p>
           </div>
-          <Link to="/">
-            <Button variant="outline">Logout</Button>
-          </Link>
+          <div className="flex gap-2">
+            <Link to="/lecturer/create-course">
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Create Course
+              </Button>
+            </Link>
+            <Button variant="outline" onClick={signOut}>
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </Button>
+          </div>
         </div>
       </header>
 
