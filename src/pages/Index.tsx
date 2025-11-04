@@ -2,10 +2,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { GraduationCap, BookOpen, Users } from "lucide-react";
 import { Link } from "react-router-dom";
-
 const Index = () => {
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5">
+  return <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5">
       <div className="container mx-auto px-6 py-12">
         <div className="text-center mb-16">
           <div className="inline-flex items-center gap-2 mb-4">
@@ -88,13 +86,9 @@ const Index = () => {
         </div>
 
         <div className="mt-16 text-center">
-          <p className="text-sm text-muted-foreground">
-            Powered by AI technology for enhanced educational assessment
-          </p>
+          
         </div>
       </div>
-    </div>
-  );
+    </div>;
 };
-
 export default Index;
