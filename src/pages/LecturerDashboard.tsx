@@ -4,11 +4,65 @@ import { Badge } from "@/components/ui/badge";
 import { Users, FileCheck, Clock, BookOpen, LogOut, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
 
 const LecturerDashboard = () => {
   const { user, loading, signOut } = useAuth("lecturer");
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    total: 0,
+    pending: 0,
+    inProgress: 0,
+    completed: 0,
+  });
+  const [loadingData, setLoadingData] = useState(true);
 
-  if (loading) {
+  useEffect(() => {
+    if (user) {
+      fetchSubmissions();
+    }
+  }, [user]);
+
+  const fetchSubmissions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("submissions")
+        .select(`
+          *,
+          assignment:assignments(
+            title,
+            course:courses(
+              title,
+              code
+            )
+          ),
+          student:profiles!submissions_student_id_fkey(
+            full_name,
+            email
+          )
+        `)
+        .eq("assignment.course.lecturer_id", user?.id)
+        .order("submitted_at", { ascending: false });
+
+      if (error) throw error;
+
+      setSubmissions(data || []);
+      
+      // Calculate stats
+      const total = data?.length || 0;
+      const pending = data?.filter((s) => !s.grade).length || 0;
+      const completed = data?.filter((s) => s.grade).length || 0;
+      
+      setStats({ total, pending, inProgress: 0, completed });
+    } catch (error) {
+      console.error("Error fetching submissions:", error);
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  if (loading || loadingData) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p>Loading...</p>
@@ -16,47 +70,11 @@ const LecturerDashboard = () => {
     );
   }
 
-  const submissions = [
-    {
-      id: 1,
-      studentName: "Ahmad Hassan",
-      studentId: "S2021001",
-      assignment: "Research Paper: AI in Education",
-      course: "Computer Science 301",
-      submittedDate: "2025-11-03",
-      status: "pending",
-    },
-    {
-      id: 2,
-      studentName: "Fatimah Ali",
-      studentId: "S2021045",
-      assignment: "Lab Report: Data Structures",
-      course: "Computer Science 201",
-      submittedDate: "2025-11-02",
-      status: "pending",
-    },
-    {
-      id: 3,
-      studentName: "Mohammed Ibrahim",
-      studentId: "S2021089",
-      assignment: "Project Proposal",
-      course: "Software Engineering 401",
-      submittedDate: "2025-11-01",
-      status: "reviewed",
-      grade: "A",
-    },
-    {
-      id: 4,
-      studentName: "Aisha Rahman",
-      studentId: "S2021123",
-      assignment: "Essay: Islamic Studies",
-      course: "Islamic Studies 101",
-      submittedDate: "2025-11-02",
-      status: "in-progress",
-    },
-  ];
-
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (hasGrade: boolean) => {
+    if (hasGrade) {
+      return "bg-success/20 text-success hover:bg-success/30";
+    }
+    return "bg-accent/20 text-accent hover:bg-accent/30";
     switch (status) {
       case "pending":
         return "bg-accent/20 text-accent hover:bg-accent/30";
@@ -78,12 +96,20 @@ const LecturerDashboard = () => {
             <p className="text-sm text-muted-foreground">Albukhary International University</p>
           </div>
           <div className="flex gap-2">
-            <Link to="/lecturer/create-course">
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Create Course
-              </Button>
-            </Link>
+            <div className="flex gap-2">
+              <Link to="/lecturer/create-course">
+                <Button variant="outline">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Course
+                </Button>
+              </Link>
+              <Link to="/lecturer/create-assignment">
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Assignment
+                </Button>
+              </Link>
+            </div>
             <Button variant="outline" onClick={signOut}>
               <LogOut className="mr-2 h-4 w-4" />
               Logout
@@ -100,8 +126,8 @@ const LecturerDashboard = () => {
               <FileCheck className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">4</div>
-              <p className="text-xs text-muted-foreground">This week</p>
+              <div className="text-2xl font-bold">{stats.total}</div>
+              <p className="text-xs text-muted-foreground">Total</p>
             </CardContent>
           </Card>
 
@@ -111,8 +137,8 @@ const LecturerDashboard = () => {
               <Clock className="h-4 w-4 text-accent" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">2</div>
-              <p className="text-xs text-muted-foreground">Needs attention</p>
+              <div className="text-2xl font-bold">{stats.pending}</div>
+              <p className="text-xs text-muted-foreground">Needs review</p>
             </CardContent>
           </Card>
 
@@ -122,8 +148,8 @@ const LecturerDashboard = () => {
               <BookOpen className="h-4 w-4 text-secondary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">1</div>
-              <p className="text-xs text-muted-foreground">Being reviewed</p>
+              <div className="text-2xl font-bold">{stats.inProgress}</div>
+              <p className="text-xs text-muted-foreground">In progress</p>
             </CardContent>
           </Card>
 
@@ -133,8 +159,8 @@ const LecturerDashboard = () => {
               <Users className="h-4 w-4 text-success" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">1</div>
-              <p className="text-xs text-muted-foreground">This week</p>
+              <div className="text-2xl font-bold">{stats.completed}</div>
+              <p className="text-xs text-muted-foreground">Graded</p>
             </CardContent>
           </Card>
         </div>
@@ -149,50 +175,49 @@ const LecturerDashboard = () => {
           </div>
 
           <div className="grid gap-4">
-            {submissions.map((submission) => (
-              <Card key={submission.id} className="shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1 flex-1">
-                      <CardTitle className="text-lg">{submission.studentName}</CardTitle>
-                      <CardDescription>
-                        {submission.studentId} • {submission.course}
-                      </CardDescription>
-                    </div>
-                    <Badge className={getStatusColor(submission.status)}>
-                      {submission.status}
-                      {submission.grade && ` - ${submission.grade}`}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm font-medium mb-2">{submission.assignment}</p>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center text-sm text-muted-foreground">
-                      <Clock className="mr-1 h-4 w-4" />
-                      Submitted: {new Date(submission.submittedDate).toLocaleDateString()}
-                    </div>
-                    <div className="space-x-2">
-                      {submission.status === "pending" && (
-                        <Link to={`/lecturer/review/${submission.id}`}>
-                          <Button>Review Submission</Button>
-                        </Link>
-                      )}
-                      {submission.status === "reviewed" && (
-                        <Link to={`/lecturer/review/${submission.id}`}>
-                          <Button variant="outline">View Review</Button>
-                        </Link>
-                      )}
-                      {submission.status === "in-progress" && (
-                        <Link to={`/lecturer/review/${submission.id}`}>
-                          <Button variant="secondary">Continue Review</Button>
-                        </Link>
-                      )}
-                    </div>
-                  </div>
+            {submissions.length === 0 ? (
+              <Card className="shadow-sm">
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  No submissions yet
                 </CardContent>
               </Card>
-            ))}
+            ) : (
+              submissions.map((submission) => (
+                <Card key={submission.id} className="shadow-sm hover:shadow-md transition-shadow">
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1 flex-1">
+                        <CardTitle className="text-lg">
+                          {submission.student?.full_name || "Unknown Student"}
+                        </CardTitle>
+                        <CardDescription>
+                          {submission.student?.email} • {submission.assignment?.course?.code} - {submission.assignment?.course?.title}
+                        </CardDescription>
+                      </div>
+                      <Badge className={getStatusColor(!!submission.grade)}>
+                        {submission.grade ? `Graded - ${submission.grade}` : "Pending Review"}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm font-medium mb-2">{submission.assignment?.title}</p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center text-sm text-muted-foreground">
+                        <Clock className="mr-1 h-4 w-4" />
+                        Submitted: {new Date(submission.submitted_at).toLocaleDateString()}
+                      </div>
+                      <div className="space-x-2">
+                        <Link to={`/lecturer/review/${submission.id}`}>
+                          <Button variant={submission.grade ? "outline" : "default"}>
+                            {submission.grade ? "View Review" : "Review Submission"}
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         </div>
       </main>

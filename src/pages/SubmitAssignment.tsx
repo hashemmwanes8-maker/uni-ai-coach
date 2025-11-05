@@ -4,26 +4,55 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Upload, FileText } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
-import { useState } from "react";
+import { Link, useParams, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 
 const SubmitAssignment = () => {
   const { id } = useParams();
   const { toast } = useToast();
+  const { user, loading } = useAuth("student");
+  const navigate = useNavigate();
   const [fileName, setFileName] = useState<string>("");
+  const [content, setContent] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [assignment, setAssignment] = useState<any>(null);
+  const [loadingAssignment, setLoadingAssignment] = useState(true);
 
-  const assignment = {
-    title: "Research Paper: AI in Education",
-    course: "Computer Science 301",
-    dueDate: "2025-11-10",
-    description: "Write a comprehensive research paper on artificial intelligence applications in education.",
-    requirements: [
-      "Minimum 3000 words",
-      "APA citation format",
-      "At least 10 peer-reviewed sources",
-      "Include case studies and real-world examples"
-    ]
+  useEffect(() => {
+    if (id) {
+      fetchAssignment();
+    }
+  }, [id]);
+
+  const fetchAssignment = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("assignments")
+        .select(`
+          *,
+          course:courses(
+            title,
+            code
+          )
+        `)
+        .eq("id", id)
+        .single();
+
+      if (error) throw error;
+      setAssignment(data);
+    } catch (error) {
+      console.error("Error fetching assignment:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load assignment",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingAssignment(false);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -33,12 +62,60 @@ const SubmitAssignment = () => {
     }
   };
 
-  const handleSubmit = () => {
-    toast({
-      title: "Assignment Submitted!",
-      description: "Your assignment has been submitted successfully and is under review.",
-    });
+  const handleSubmit = async () => {
+    if (!content.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter your submission content",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.from("submissions").insert({
+        assignment_id: id,
+        student_id: user?.id,
+        content: content,
+        file_url: fileName || null,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Assignment Submitted!",
+        description: "Your assignment has been submitted successfully and is under review.",
+      });
+
+      navigate("/student/dashboard");
+    } catch (error) {
+      console.error("Error submitting assignment:", error);
+      toast({
+        title: "Error",
+        description: "Failed to submit assignment",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  if (loading || loadingAssignment) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
+  if (!assignment) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Assignment not found</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -57,21 +134,23 @@ const SubmitAssignment = () => {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="text-2xl">{assignment.title}</CardTitle>
-            <CardDescription>{assignment.course}</CardDescription>
+            <CardDescription>
+              {assignment.course?.code} - {assignment.course?.title}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div>
               <h3 className="font-semibold mb-2">Assignment Description</h3>
-              <p className="text-sm text-muted-foreground">{assignment.description}</p>
+              <p className="text-sm text-muted-foreground">
+                {assignment.description || "No description provided"}
+              </p>
             </div>
 
             <div>
-              <h3 className="font-semibold mb-2">Requirements</h3>
-              <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                {assignment.requirements.map((req, index) => (
-                  <li key={index}>{req}</li>
-                ))}
-              </ul>
+              <h3 className="font-semibold mb-2">Due Date</h3>
+              <p className="text-sm text-muted-foreground">
+                {new Date(assignment.due_date).toLocaleString()}
+              </p>
             </div>
 
             <div className="border-t pt-6">
@@ -101,22 +180,24 @@ const SubmitAssignment = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="comments">Additional Comments (Optional)</Label>
+                  <Label htmlFor="content">Your Submission *</Label>
                   <Textarea
-                    id="comments"
-                    placeholder="Add any comments or notes for your lecturer..."
+                    id="content"
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Enter your assignment content here..."
                     className="mt-2"
-                    rows={4}
+                    rows={8}
                   />
                 </div>
 
                 <div className="flex items-center justify-between pt-4 border-t">
                   <p className="text-sm text-muted-foreground">
-                    Due: {new Date(assignment.dueDate).toLocaleDateString()}
+                    Due: {new Date(assignment.due_date).toLocaleDateString()}
                   </p>
-                  <Button onClick={handleSubmit} className="gap-2">
+                  <Button onClick={handleSubmit} disabled={submitting} className="gap-2">
                     <Upload className="h-4 w-4" />
-                    Submit Assignment
+                    {submitting ? "Submitting..." : "Submit Assignment"}
                   </Button>
                 </div>
               </div>

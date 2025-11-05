@@ -4,53 +4,83 @@ import { Badge } from "@/components/ui/badge";
 import { BookOpen, Clock, FileText, CheckCircle2, LogOut } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
 
 const StudentDashboard = () => {
   const { user, loading, signOut } = useAuth("student");
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    pending: 0,
+    submitted: 0,
+    graded: 0,
+  });
+  const [loadingData, setLoadingData] = useState(true);
 
-  if (loading) {
+  useEffect(() => {
+    if (user) {
+      fetchAssignments();
+    }
+  }, [user]);
+
+  const fetchAssignments = async () => {
+    try {
+      // First get all assignments
+      const { data: allAssignments, error: assignmentsError } = await supabase
+        .from("assignments")
+        .select(`
+          *,
+          course:courses(
+            title,
+            code
+          )
+        `)
+        .order("due_date", { ascending: true });
+
+      if (assignmentsError) throw assignmentsError;
+
+      // Then get student's submissions
+      const { data: submissions, error: submissionsError } = await supabase
+        .from("submissions")
+        .select("*")
+        .eq("student_id", user?.id);
+
+      if (submissionsError) throw submissionsError;
+
+      // Merge data
+      const assignmentsWithStatus = allAssignments?.map((assignment) => {
+        const submission = submissions?.find((s) => s.assignment_id === assignment.id);
+        return {
+          ...assignment,
+          submission,
+          status: submission 
+            ? (submission.grade ? "graded" : "submitted")
+            : "pending",
+        };
+      }) || [];
+
+      setAssignments(assignmentsWithStatus);
+
+      // Calculate stats
+      const pending = assignmentsWithStatus.filter((a) => a.status === "pending").length;
+      const submitted = assignmentsWithStatus.filter((a) => a.status === "submitted").length;
+      const graded = assignmentsWithStatus.filter((a) => a.status === "graded").length;
+
+      setStats({ pending, submitted, graded });
+    } catch (error) {
+      console.error("Error fetching assignments:", error);
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  if (loading || loadingData) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p>Loading...</p>
       </div>
     );
   }
-
-  const assignments = [
-    {
-      id: 1,
-      title: "Research Paper: AI in Education",
-      course: "Computer Science 301",
-      dueDate: "2025-11-10",
-      status: "pending",
-      description: "Write a comprehensive research paper on artificial intelligence applications in education."
-    },
-    {
-      id: 2,
-      title: "Lab Report: Data Structures",
-      course: "Computer Science 201",
-      dueDate: "2025-11-08",
-      status: "submitted",
-      description: "Complete lab report on binary trees and graph algorithms implementation."
-    },
-    {
-      id: 3,
-      title: "Essay: Islamic Studies",
-      course: "Islamic Studies 101",
-      dueDate: "2025-11-15",
-      status: "pending",
-      description: "Analytical essay on contemporary Islamic thought and philosophy."
-    },
-    {
-      id: 4,
-      title: "Project Proposal",
-      course: "Software Engineering 401",
-      dueDate: "2025-11-05",
-      status: "graded",
-      grade: "A",
-      description: "Final year project proposal with implementation timeline."
-    }
-  ];
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -88,7 +118,7 @@ const StudentDashboard = () => {
               <Clock className="h-4 w-4 text-accent" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">2</div>
+              <div className="text-2xl font-bold">{stats.pending}</div>
               <p className="text-xs text-muted-foreground">Assignments due</p>
             </CardContent>
           </Card>
@@ -99,7 +129,7 @@ const StudentDashboard = () => {
               <FileText className="h-4 w-4 text-secondary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">1</div>
+              <div className="text-2xl font-bold">{stats.submitted}</div>
               <p className="text-xs text-muted-foreground">Awaiting review</p>
             </CardContent>
           </Card>
@@ -110,7 +140,7 @@ const StudentDashboard = () => {
               <CheckCircle2 className="h-4 w-4 text-success" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">1</div>
+              <div className="text-2xl font-bold">{stats.graded}</div>
               <p className="text-xs text-muted-foreground">This semester</p>
             </CardContent>
           </Card>
@@ -126,48 +156,60 @@ const StudentDashboard = () => {
           </div>
 
           <div className="grid gap-4">
-            {assignments.map((assignment) => (
-              <Card key={assignment.id} className="shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1 flex-1">
-                      <CardTitle className="text-lg">{assignment.title}</CardTitle>
-                      <CardDescription>{assignment.course}</CardDescription>
-                    </div>
-                    <Badge className={getStatusColor(assignment.status)}>
-                      {assignment.status}
-                      {assignment.grade && ` - ${assignment.grade}`}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground mb-4">{assignment.description}</p>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center text-sm text-muted-foreground">
-                      <Clock className="mr-1 h-4 w-4" />
-                      Due: {new Date(assignment.dueDate).toLocaleDateString()}
-                    </div>
-                    <div className="space-x-2">
-                      {assignment.status === "pending" && (
-                        <Link to={`/student/submit/${assignment.id}`}>
-                          <Button>Submit Assignment</Button>
-                        </Link>
-                      )}
-                      {assignment.status === "graded" && (
-                        <Link to={`/student/feedback/${assignment.id}`}>
-                          <Button variant="outline">View Feedback</Button>
-                        </Link>
-                      )}
-                      {assignment.status === "submitted" && (
-                        <Button variant="outline" disabled>
-                          Under Review
-                        </Button>
-                      )}
-                    </div>
-                  </div>
+            {assignments.length === 0 ? (
+              <Card className="shadow-sm">
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  No assignments available yet
                 </CardContent>
               </Card>
-            ))}
+            ) : (
+              assignments.map((assignment) => (
+                <Card key={assignment.id} className="shadow-sm hover:shadow-md transition-shadow">
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1 flex-1">
+                        <CardTitle className="text-lg">{assignment.title}</CardTitle>
+                        <CardDescription>
+                          {assignment.course?.code} - {assignment.course?.title}
+                        </CardDescription>
+                      </div>
+                      <Badge className={getStatusColor(assignment.status)}>
+                        {assignment.status}
+                        {assignment.submission?.grade && ` - ${assignment.submission.grade}`}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      {assignment.description || "No description provided"}
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center text-sm text-muted-foreground">
+                        <Clock className="mr-1 h-4 w-4" />
+                        Due: {new Date(assignment.due_date).toLocaleDateString()}
+                      </div>
+                      <div className="space-x-2">
+                        {assignment.status === "pending" && (
+                          <Link to={`/student/submit/${assignment.id}`}>
+                            <Button>Submit Assignment</Button>
+                          </Link>
+                        )}
+                        {assignment.status === "graded" && (
+                          <Link to={`/student/feedback/${assignment.submission.id}`}>
+                            <Button variant="outline">View Feedback</Button>
+                          </Link>
+                        )}
+                        {assignment.status === "submitted" && (
+                          <Button variant="outline" disabled>
+                            Under Review
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         </div>
       </main>

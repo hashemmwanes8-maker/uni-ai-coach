@@ -8,6 +8,7 @@ import Auth from "./pages/Auth";
 import StudentDashboard from "./pages/StudentDashboard";
 import LecturerDashboard from "./pages/LecturerDashboard";
 import CreateCourse from "./pages/CreateCourse";
+import CreateAssignment from "./pages/CreateAssignment";
 import SubmitAssignment from "./pages/SubmitAssignment";
 import ReviewSubmission from "./pages/ReviewSubmission";
 import ViewFeedback from "./pages/ViewFeedback";
@@ -29,6 +30,7 @@ const App = () => (
           <Route path="/student/feedback/:id" element={<ViewFeedback />} />
           <Route path="/lecturer/dashboard" element={<LecturerDashboard />} />
           <Route path="/lecturer/create-course" element={<CreateCourse />} />
+          <Route path="/lecturer/create-assignment" element={<CreateAssignment />} />
           <Route path="/lecturer/review/:id" element={<ReviewSubmission />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
