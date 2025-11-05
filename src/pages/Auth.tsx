@@ -91,16 +91,29 @@ const Auth = () => {
           .from("user_roles")
           .select("role")
           .eq("user_id", data.user.id)
-          .single();
+          .maybeSingle();
 
         if (roles) {
           navigate(roles.role === "student" ? "/student/dashboard" : "/lecturer/dashboard");
         } else {
-          toast({
-            title: "Error",
-            description: "User role not found. Please contact support.",
-            variant: "destructive"
-          });
+          // No role found - create one based on current mode selection
+          const { error: roleError } = await supabase
+            .from("user_roles")
+            .insert({ user_id: data.user.id, role: mode });
+
+          if (roleError) {
+            toast({
+              title: "Error",
+              description: "Failed to assign user role. Please try again.",
+              variant: "destructive"
+            });
+          } else {
+            toast({
+              title: "Role Assigned",
+              description: `You've been assigned the ${mode} role.`
+            });
+            navigate(mode === "student" ? "/student/dashboard" : "/lecturer/dashboard");
+          }
         }
       }
     } catch (error: any) {
@@ -151,12 +164,21 @@ const Auth = () => {
       if (error) throw error;
 
       if (data.user) {
-        // Insert user role
-        const { error: roleError } = await supabase
+        // Check if role already exists
+        const { data: existingRole } = await supabase
           .from("user_roles")
-          .insert({ user_id: data.user.id, role: mode });
+          .select("role")
+          .eq("user_id", data.user.id)
+          .maybeSingle();
 
-        if (roleError) throw roleError;
+        // Insert user role if it doesn't exist
+        if (!existingRole) {
+          const { error: roleError } = await supabase
+            .from("user_roles")
+            .insert({ user_id: data.user.id, role: mode });
+
+          if (roleError) throw roleError;
+        }
 
         toast({
           title: "Account Created",
