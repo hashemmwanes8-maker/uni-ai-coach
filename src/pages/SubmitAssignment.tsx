@@ -43,13 +43,8 @@ const SubmitAssignment = () => {
 
       if (error) throw error;
       setAssignment(data);
-    } catch (error) {
-      console.error("Error fetching assignment:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load assignment",
-        variant: "destructive",
-      });
+    } catch (error: any) {
+      // Silent fail - will show "Assignment not found" state
     } finally {
       setLoadingAssignment(false);
     }
@@ -63,10 +58,21 @@ const SubmitAssignment = () => {
   };
 
   const handleSubmit = async () => {
-    if (!content.trim()) {
+    const trimmedContent = content.trim();
+    
+    if (!trimmedContent) {
       toast({
         title: "Error",
         description: "Please enter your submission content",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (trimmedContent.length > 50000) {
+      toast({
+        title: "Error",
+        description: "Submission content must be less than 50,000 characters",
         variant: "destructive",
       });
       return;
@@ -77,7 +83,7 @@ const SubmitAssignment = () => {
       const { error } = await supabase.from("submissions").insert({
         assignment_id: id,
         student_id: user?.id,
-        content: content,
+        content: trimmedContent,
         file_url: fileName || null,
       });
 
@@ -89,11 +95,10 @@ const SubmitAssignment = () => {
       });
 
       navigate("/student/dashboard");
-    } catch (error) {
-      console.error("Error submitting assignment:", error);
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to submit assignment",
+        description: "Unable to submit assignment. Please try again.",
         variant: "destructive",
       });
     } finally {

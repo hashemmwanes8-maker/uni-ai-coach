@@ -26,6 +26,41 @@ const LecturerDashboard = () => {
 
   const fetchSubmissions = async () => {
     try {
+      // First get courses taught by this lecturer
+      const { data: courses, error: coursesError } = await supabase
+        .from("courses")
+        .select("id")
+        .eq("lecturer_id", user?.id);
+
+      if (coursesError) throw coursesError;
+
+      const courseIds = courses?.map(c => c.id) || [];
+
+      if (courseIds.length === 0) {
+        setSubmissions([]);
+        setStats({ total: 0, pending: 0, inProgress: 0, completed: 0 });
+        setLoadingData(false);
+        return;
+      }
+
+      // Then get assignments for those courses
+      const { data: assignments, error: assignmentsError } = await supabase
+        .from("assignments")
+        .select("id")
+        .in("course_id", courseIds);
+
+      if (assignmentsError) throw assignmentsError;
+
+      const assignmentIds = assignments?.map(a => a.id) || [];
+
+      if (assignmentIds.length === 0) {
+        setSubmissions([]);
+        setStats({ total: 0, pending: 0, inProgress: 0, completed: 0 });
+        setLoadingData(false);
+        return;
+      }
+
+      // Finally get submissions for those assignments
       const { data, error } = await supabase
         .from("submissions")
         .select(`
@@ -42,7 +77,7 @@ const LecturerDashboard = () => {
             email
           )
         `)
-        .eq("assignment.course.lecturer_id", user?.id)
+        .in("assignment_id", assignmentIds)
         .order("submitted_at", { ascending: false });
 
       if (error) throw error;
@@ -55,8 +90,8 @@ const LecturerDashboard = () => {
       const completed = data?.filter((s) => s.grade).length || 0;
       
       setStats({ total, pending, inProgress: 0, completed });
-    } catch (error) {
-      console.error("Error fetching submissions:", error);
+    } catch (error: any) {
+      // Silent fail - just show empty state
     } finally {
       setLoadingData(false);
     }

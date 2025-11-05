@@ -26,7 +26,6 @@ const Auth = () => {
   const location = useLocation();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<"student" | "lecturer">("student");
 
   // Form states
   const [loginEmail, setLoginEmail] = useState("");
@@ -34,15 +33,6 @@ const Auth = () => {
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [signupFullName, setSignupFullName] = useState("");
-
-  // Get mode from URL params
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const urlMode = params.get("mode");
-    if (urlMode === "student" || urlMode === "lecturer") {
-      setMode(urlMode);
-    }
-  }, [location]);
 
   // Check if user is already logged in
   useEffect(() => {
@@ -96,30 +86,18 @@ const Auth = () => {
         if (roles) {
           navigate(roles.role === "student" ? "/student/dashboard" : "/lecturer/dashboard");
         } else {
-          // No role found - create one based on current mode selection
-          const { error: roleError } = await supabase
-            .from("user_roles")
-            .insert({ user_id: data.user.id, role: mode });
-
-          if (roleError) {
-            toast({
-              title: "Error",
-              description: "Failed to assign user role. Please try again.",
-              variant: "destructive"
-            });
-          } else {
-            toast({
-              title: "Role Assigned",
-              description: `You've been assigned the ${mode} role.`
-            });
-            navigate(mode === "student" ? "/student/dashboard" : "/lecturer/dashboard");
-          }
+          toast({
+            title: "Access Error",
+            description: "No role assigned to your account. Please contact support.",
+            variant: "destructive"
+          });
+          await supabase.auth.signOut();
         }
       }
     } catch (error: any) {
       toast({
         title: "Login Failed",
-        description: error.message,
+        description: "Invalid email or password. Please try again.",
         variant: "destructive"
       });
     } finally {
@@ -164,33 +142,22 @@ const Auth = () => {
       if (error) throw error;
 
       if (data.user) {
-        // Check if role already exists
-        const { data: existingRole } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", data.user.id)
-          .maybeSingle();
-
-        // Insert user role if it doesn't exist
-        if (!existingRole) {
-          const { error: roleError } = await supabase
-            .from("user_roles")
-            .insert({ user_id: data.user.id, role: mode });
-
-          if (roleError) throw roleError;
-        }
-
         toast({
           title: "Account Created",
-          description: "Your account has been created successfully!"
+          description: "Your account has been created with student access!"
         });
 
-        navigate(mode === "student" ? "/student/dashboard" : "/lecturer/dashboard");
+        // Role is automatically assigned by database trigger
+        navigate("/student/dashboard");
       }
     } catch (error: any) {
+      const errorMessage = error.message?.includes("already registered") 
+        ? "This email is already registered. Please login instead."
+        : "Unable to create account. Please try again.";
+      
       toast({
         title: "Signup Failed",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
@@ -209,27 +176,10 @@ const Auth = () => {
           </div>
           <CardTitle className="text-2xl">Welcome Back</CardTitle>
           <CardDescription>
-            Sign in as a {mode} or create a new account
+            Sign in or create a new account
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-2 mb-6">
-            <Button
-              variant={mode === "student" ? "default" : "outline"}
-              className="flex-1"
-              onClick={() => setMode("student")}
-            >
-              Student
-            </Button>
-            <Button
-              variant={mode === "lecturer" ? "default" : "outline"}
-              className="flex-1"
-              onClick={() => setMode("lecturer")}
-            >
-              Lecturer
-            </Button>
-          </div>
-
           <Tabs defaultValue="login" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="login">Login</TabsTrigger>
@@ -300,7 +250,7 @@ const Auth = () => {
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Creating Account..." : `Create ${mode} Account`}
+                  {loading ? "Creating Account..." : "Create Account"}
                 </Button>
               </form>
             </TabsContent>

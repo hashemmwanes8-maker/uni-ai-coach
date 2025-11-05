@@ -54,13 +54,8 @@ const ReviewSubmission = () => {
       setSubmission(data);
       setGrade(data.grade ? data.grade.toString() : "");
       setFeedback(data.feedback || "");
-    } catch (error) {
-      console.error("Error fetching submission:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load submission",
-        variant: "destructive",
-      });
+    } catch (error: any) {
+      // Silent fail - will show "Submission not found" state
     } finally {
       setLoadingSubmission(false);
     }
@@ -74,10 +69,31 @@ const ReviewSubmission = () => {
   };
 
   const handleSubmitReview = async () => {
-    if (!grade) {
+    const trimmedFeedback = feedback.trim();
+    const numericGrade = parseFloat(grade);
+
+    if (!grade || isNaN(numericGrade)) {
       toast({
         title: "Error",
-        description: "Please select a grade",
+        description: "Please enter a valid grade",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (numericGrade < 0 || numericGrade > 100) {
+      toast({
+        title: "Error",
+        description: "Grade must be between 0 and 100",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (trimmedFeedback.length > 5000) {
+      toast({
+        title: "Error",
+        description: "Feedback must be less than 5,000 characters",
         variant: "destructive",
       });
       return;
@@ -88,8 +104,8 @@ const ReviewSubmission = () => {
       const { error } = await supabase
         .from("submissions")
         .update({
-          grade: parseFloat(grade),
-          feedback: feedback,
+          grade: numericGrade,
+          feedback: trimmedFeedback || null,
         })
         .eq("id", id);
 
@@ -101,11 +117,10 @@ const ReviewSubmission = () => {
       });
 
       navigate("/lecturer/dashboard");
-    } catch (error) {
-      console.error("Error submitting review:", error);
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to submit review",
+        description: "Unable to submit review. Please try again.",
         variant: "destructive",
       });
     } finally {
