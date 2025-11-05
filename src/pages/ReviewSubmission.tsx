@@ -42,7 +42,7 @@ const ReviewSubmission = () => {
               code
             )
           ),
-          student:profiles!submissions_student_id_fkey(
+          student:profiles(
             full_name,
             email
           )
