@@ -16,6 +16,7 @@ const SubmitAssignment = () => {
   const { user, loading } = useAuth("student");
   const navigate = useNavigate();
   const [fileName, setFileName] = useState<string>("");
+  const [file, setFile] = useState<File | null>(null);
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [assignment, setAssignment] = useState<any>(null);
@@ -51,19 +52,31 @@ const SubmitAssignment = () => {
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setFileName(file.name);
+    if (e.target.files && e.target.files[0]) {
+      const selectedFile = e.target.files[0];
+      
+      // Validate file size (50MB)
+      if (selectedFile.size > 52428800) {
+        toast({
+          title: "Error",
+          description: "File size must be less than 50MB",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setFile(selectedFile);
+      setFileName(selectedFile.name);
     }
   };
 
   const handleSubmit = async () => {
     const trimmedContent = content.trim();
     
-    if (!trimmedContent) {
+    if (!trimmedContent && !file) {
       toast({
         title: "Error",
-        description: "Please enter your submission content",
+        description: "Please provide either text content or upload a file",
         variant: "destructive",
       });
       return;
@@ -80,11 +93,33 @@ const SubmitAssignment = () => {
 
     setSubmitting(true);
     try {
+      let fileUrl = null;
+
+      // Upload file to Supabase Storage if provided
+      if (file) {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${user?.id}/${id}/${Date.now()}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('submissions')
+          .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) {
+          console.error('File upload error:', uploadError);
+          throw new Error('Failed to upload file');
+        }
+
+        fileUrl = fileName; // Store the path, not the full URL
+      }
+
       const { error } = await supabase.from("submissions").insert({
         assignment_id: id,
         student_id: user?.id,
-        content: trimmedContent,
-        file_url: fileName || null,
+        content: trimmedContent || "See attached file",
+        file_url: fileUrl,
       });
 
       if (error) throw error;
@@ -98,7 +133,7 @@ const SubmitAssignment = () => {
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Unable to submit assignment. Please try again.",
+        description: error.message || "Unable to submit assignment. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -162,39 +197,42 @@ const SubmitAssignment = () => {
               <h3 className="font-semibold mb-4">Submit Your Work</h3>
               
               <div className="space-y-4">
-                <div>
-                  <Label htmlFor="file">Upload Document</Label>
-                  <div className="mt-2">
-                    <Input
-                      id="file"
-                      type="file"
-                      accept=".pdf,.doc,.docx"
-                      onChange={handleFileChange}
-                      className="cursor-pointer"
-                    />
-                    {fileName && (
-                      <div className="mt-2 flex items-center text-sm text-muted-foreground">
-                        <FileText className="mr-2 h-4 w-4" />
-                        {fileName}
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Accepted formats: PDF, DOC, DOCX (Max 10MB)
-                  </p>
-                </div>
-
-                <div>
-                  <Label htmlFor="content">Your Submission *</Label>
-                  <Textarea
-                    id="content"
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    placeholder="Enter your assignment content here..."
-                    className="mt-2"
-                    rows={8}
+              <div>
+                <Label htmlFor="file">Upload Document (Optional)</Label>
+                <div className="mt-2">
+                  <Input
+                    id="file"
+                    type="file"
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.zip"
+                    onChange={handleFileChange}
+                    className="cursor-pointer"
                   />
+                  {fileName && (
+                    <div className="mt-2 flex items-center text-sm text-muted-foreground">
+                      <FileText className="mr-2 h-4 w-4" />
+                      {fileName}
+                    </div>
+                  )}
                 </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Accepted: PDF, Word, PowerPoint, Text, Images, ZIP (Max 50MB)
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="content">Your Submission {!file && "*"}</Label>
+                <Textarea
+                  id="content"
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="Enter your assignment content here..."
+                  className="mt-2"
+                  rows={8}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {content.length} / 50,000 characters
+                </p>
+              </div>
 
                 <div className="flex items-center justify-between pt-4 border-t">
                   <p className="text-sm text-muted-foreground">
