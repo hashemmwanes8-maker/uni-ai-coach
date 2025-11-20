@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,10 +13,102 @@ serve(async (req) => {
   }
 
   try {
-    const { submissionContent, assignmentTitle } = await req.json();
+    // Get authorization token
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    // Verify user is authenticated
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error('Authentication error:', authError);
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Verify user has lecturer role
+    const { data: roleData, error: roleError } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('role', 'lecturer')
+      .single();
+
+    if (roleError || !roleData) {
+      console.error('Role verification failed:', roleError);
+      return new Response(
+        JSON.stringify({ error: 'Forbidden: Only lecturers can generate feedback' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { submissionContent, assignmentTitle, submissionId } = await req.json();
     
+    // Input validation
     if (!submissionContent) {
-      throw new Error('No submission content provided');
+      return new Response(
+        JSON.stringify({ error: 'No submission content provided' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (submissionContent.length > 50000) {
+      return new Response(
+        JSON.stringify({ error: 'Content too large. Maximum 50,000 characters allowed.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (assignmentTitle && assignmentTitle.length > 500) {
+      return new Response(
+        JSON.stringify({ error: 'Assignment title too long. Maximum 500 characters allowed.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Verify lecturer owns the course for this submission (if submissionId provided)
+    if (submissionId) {
+      const { data: submission, error: submissionError } = await supabase
+        .from('submissions')
+        .select(`
+          id,
+          assignment:assignments(
+            id,
+            course:courses(
+              lecturer_id
+            )
+          )
+        `)
+        .eq('id', submissionId)
+        .single();
+
+      if (submissionError || !submission) {
+        return new Response(
+          JSON.stringify({ error: 'Submission not found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const lecturerId = submission.assignment?.[0]?.course?.[0]?.lecturer_id;
+      if (lecturerId !== user.id) {
+        return new Response(
+          JSON.stringify({ error: 'Forbidden: You can only generate feedback for your own courses' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -23,7 +116,7 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    console.log('Generating AI feedback for assignment:', assignmentTitle);
+    console.log('Generating AI feedback for assignment:', assignmentTitle, 'by user:', user.id);
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',

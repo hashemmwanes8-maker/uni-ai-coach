@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, FileText, Download, Sparkles } from "lucide-react";
+import { ArrowLeft, FileText, Download, Sparkles, Send } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -23,6 +23,7 @@ const ReviewSubmission = () => {
   const [feedback, setFeedback] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [generatingAI, setGeneratingAI] = useState(false);
+  const [downloadingFile, setDownloadingFile] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -42,17 +43,21 @@ const ReviewSubmission = () => {
               title,
               code
             )
-          ),
-          student:profiles(
-            full_name,
-            email
           )
         `)
         .eq("id", id)
         .single();
 
       if (error) throw error;
-      setSubmission(data);
+
+      // Fetch student profile separately
+      const { data: studentData } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", data.student_id)
+        .single();
+
+      setSubmission({ ...data, student: studentData });
       setGrade(data.grade ? data.grade.toString() : "");
       setFeedback(data.feedback || "");
     } catch (error: any) {
@@ -78,6 +83,7 @@ const ReviewSubmission = () => {
         body: {
           submissionContent: submission.content,
           assignmentTitle: submission.assignment?.title,
+          submissionId: id
         }
       });
 
@@ -103,6 +109,43 @@ const ReviewSubmission = () => {
       });
     } finally {
       setGeneratingAI(false);
+    }
+  };
+
+  const handleDownloadFile = async () => {
+    if (!submission?.file_url) return;
+
+    setDownloadingFile(true);
+    try {
+      const { data, error } = await supabase.storage
+        .from('submissions')
+        .download(submission.file_url);
+
+      if (error) throw error;
+
+      // Create download link
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = submission.file_url.split('/').pop() || 'submission';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Success",
+        description: "File downloaded successfully",
+      });
+    } catch (error: any) {
+      console.error("Error downloading file:", error);
+      toast({
+        title: "Error",
+        description: "Failed to download file",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingFile(false);
     }
   };
 
@@ -233,13 +276,26 @@ const ReviewSubmission = () => {
                     <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
                       <div className="flex items-center">
                         <FileText className="mr-2 h-4 w-4 text-primary" />
-                        <span className="text-sm">{submission.file_url}</span>
+                        <span className="text-sm">File attached</span>
                       </div>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={handleDownloadFile}
+                        disabled={downloadingFile}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        {downloadingFile ? "Downloading..." : "Download"}
+                      </Button>
                     </div>
                   </div>
                 )}
               </div>
+            </CardContent>
+          </Card>
 
+          <Card className="shadow-lg">
+            <CardContent className="pt-6">
               <div className="border-t pt-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold">Provide Feedback</h3>
