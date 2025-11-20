@@ -22,15 +22,19 @@ serve(async (req) => {
       );
     }
 
-    // Initialize Supabase client
+    // Initialize Supabase client with service role for auth verification
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey, {
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Create client with user's JWT for auth context
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseUserClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } }
     });
 
-    // Verify user is authenticated
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    // Verify user is authenticated by getting user from JWT
+    const { data: { user }, error: authError } = await supabaseUserClient.auth.getUser();
     if (authError || !user) {
       console.error('Authentication error:', authError);
       return new Response(
@@ -39,13 +43,13 @@ serve(async (req) => {
       );
     }
 
-    // Verify user has lecturer role
-    const { data: roleData, error: roleError } = await supabase
+    // Verify user has lecturer role using service role client
+    const { data: roleData, error: roleError } = await supabaseClient
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
       .eq('role', 'lecturer')
-      .single();
+      .maybeSingle();
 
     if (roleError || !roleData) {
       console.error('Role verification failed:', roleError);
@@ -81,7 +85,7 @@ serve(async (req) => {
 
     // Verify lecturer owns the course for this submission (if submissionId provided)
     if (submissionId) {
-      const { data: submission, error: submissionError } = await supabase
+      const { data: submission, error: submissionError } = await supabaseClient
         .from('submissions')
         .select(`
           id,
@@ -93,7 +97,7 @@ serve(async (req) => {
           )
         `)
         .eq('id', submissionId)
-        .single();
+        .maybeSingle();
 
       if (submissionError || !submission) {
         return new Response(
