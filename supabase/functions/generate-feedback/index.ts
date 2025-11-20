@@ -22,26 +22,26 @@ serve(async (req) => {
       );
     }
 
-    // Initialize Supabase client with service role for auth verification
+    // Initialize Supabase client with service role
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Extract JWT from Authorization header
-    const token = authHeader.replace('Bearer ', '').trim();
-
-    // Verify user is authenticated using the JWT
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
-
-    if (authError || !user) {
-      console.error('Authentication error:', authError);
+    // Extract and verify JWT
+    const jwt = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(jwt);
+    
+    if (userError || !user) {
+      console.error('Auth error:', userError);
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Verify user has lecturer role using service role client
+    console.log('User authenticated:', user.id);
+
+    // Verify user has lecturer role
     const { data: roleData, error: roleError } = await supabaseClient
       .from('user_roles')
       .select('role')
@@ -98,14 +98,19 @@ serve(async (req) => {
         .maybeSingle();
 
       if (submissionError || !submission) {
+        console.error('Submission fetch error:', submissionError);
         return new Response(
           JSON.stringify({ error: 'Submission not found' }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      const lecturerId = submission.assignment?.[0]?.course?.[0]?.lecturer_id;
+      const assignment = submission.assignment as any;
+      const course = Array.isArray(assignment) ? assignment[0]?.course : assignment?.course;
+      const lecturerId = Array.isArray(course) ? course[0]?.lecturer_id : course?.lecturer_id;
+
       if (lecturerId !== user.id) {
+        console.error('Lecturer mismatch:', { lecturerId, userId: user.id });
         return new Response(
           JSON.stringify({ error: 'Forbidden: You can only generate feedback for your own courses' }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
