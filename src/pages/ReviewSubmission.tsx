@@ -22,6 +22,7 @@ const ReviewSubmission = () => {
   const [grade, setGrade] = useState("");
   const [feedback, setFeedback] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [generatingAI, setGeneratingAI] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -61,11 +62,48 @@ const ReviewSubmission = () => {
     }
   };
 
-  const handleGenerateAIFeedback = () => {
-    toast({
-      title: "AI Feedback Generated",
-      description: "AI-powered analysis has been added to the feedback section.",
-    });
+  const handleGenerateAIFeedback = async () => {
+    if (!submission?.content) {
+      toast({
+        title: "Error",
+        description: "No submission content available to analyze.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setGeneratingAI(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-feedback', {
+        body: {
+          submissionContent: submission.content,
+          assignmentTitle: submission.assignment?.title,
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      if (data?.feedback) {
+        setFeedback(data.feedback);
+        toast({
+          title: "AI Feedback Generated",
+          description: "AI-powered analysis has been added to the feedback section.",
+        });
+      }
+    } catch (error: any) {
+      console.error('AI feedback error:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to generate AI feedback. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingAI(false);
+    }
   };
 
   const handleSubmitReview = async () => {
@@ -205,9 +243,14 @@ const ReviewSubmission = () => {
               <div className="border-t pt-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold">Provide Feedback</h3>
-                  <Button variant="secondary" size="sm" onClick={handleGenerateAIFeedback}>
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    onClick={handleGenerateAIFeedback}
+                    disabled={generatingAI || !submission?.content}
+                  >
                     <Sparkles className="mr-2 h-4 w-4" />
-                    Generate AI Feedback
+                    {generatingAI ? "Generating..." : "Generate AI Feedback"}
                   </Button>
                 </div>
 
